@@ -468,3 +468,18 @@ else: // No Memcached
 	}
 
 endif;
+
+/**
+ * Workaround for bug between memcached and WP options
+ * Often, changing an option wouldn't show up until memcached is cleared
+ * This stems from an issue that get_option first uses the cached $alloptions
+ * value to find a specific option. $alloptions doesn't get flushed when plugins,
+ * themes, and other common option changes are made.
+ */
+if ( function_exists( 'wp_cache_flush' ) ) {
+	$flush_actions = ['activate_plugin', 'deactivate_plugin', 'switch_theme', 'generate_rewrite_rules'];
+
+	foreach ( $flush_actions as $action ) {
+		add_action( $action, 'wp_cache_flush' );
+	}
+}

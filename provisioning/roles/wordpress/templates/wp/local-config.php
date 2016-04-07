@@ -10,7 +10,14 @@ define('DB_USER', 'wpe_{{ enviro }}');
 define('DB_PASSWORD', 'wordpress');
 
 /** MySQL hostname */
-define('DB_HOST', 'localhost');
+if (! defined('WP_CLI')) {
+    define('DB_HOST', 'localhost');
+} else {
+    define('DB_HOST', '192.168.150.20');
+}
+
+/** WP Engine Specific settings */
+define( 'WPE_ENVIRONMENT', 'developer' );
 
 /** Database Charset to use in creating database tables. */
 define('DB_CHARSET', 'utf8');
