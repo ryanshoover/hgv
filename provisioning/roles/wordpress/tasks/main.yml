@@ -68,7 +68,7 @@
   sudo: yes
   sudo_user: "{{ web_user }}"
   ignore_errors: yes
-  register: wpnotinstalled
+  register: wpisinstalled
 
 - name: "Run the WP install for {{ enviro }}"
   command: /usr/local/bin/wp core install --url={{ domain }} --title="WP Engine {{ enviro }} Site" --admin_user=wordpress --admin_password=wordpress --admin_email="admin@example.com"
@@ -76,7 +76,7 @@
   sudo_user: "{{ web_user }}"
   args:
     chdir: "{{ wp_doc_root }}/{{ enviro }}"
-  when: wpnotinstalled.rc and ( wp.multisite|default(False) == False )
+  when: wpisinstalled|failed and ( wp.multisite|default(False) == False )
 
 - name: "Run the multisite WP subdomain install for {{ enviro }}"
   command: /usr/local/bin/wp core multisite-install --url={{ domain }} --title="WP Engine {{ enviro }} Site" --admin_user=wordpress --admin_password=wordpress --admin_email="admin@example.com" --subdomains
@@ -84,7 +84,7 @@
   sudo_user: "{{ web_user }}"
   args:
     chdir: "{{ wp_doc_root }}/{{ enviro }}"
-  when: wpnotinstalled.rc and ( wp.multisite|default(False) == "domain" )
+  when: wpisinstalled|failed and ( wp.multisite|default(False) == "domain" )
 
 - name: "Run the multisite WP subdirectory install for {{ enviro }}"
   command: /usr/local/bin/wp core multisite-install --url={{ domain }} --title="WP Engine {{ enviro }} Site" --admin_user=wordpress --admin_password=wordpress --admin_email="admin@example.com"
@@ -92,7 +92,7 @@
   sudo_user: "{{ web_user }}"
   args:
     chdir: "{{ wp_doc_root }}/{{ enviro }}"
-  when: wpnotinstalled.rc and ( wp.multisite|default(False) == "directory" )
+  when: wpisinstalled|failed and ( wp.multisite|default(False) == "directory" )
 
 - name: "Install some useful plugins for {{ enviro }}"
   command: /usr/local/bin/wp plugin install {{ item }}
@@ -100,7 +100,7 @@
   sudo_user: "{{ web_user }}"
   with_flattened:
     - "{{ wp.custom_plugins|default([]) }}"
-    - default_plugins
+    - "{{ default_plugins }}"
   args:
       chdir: "{{ wp_doc_root }}/{{ enviro }}"
       creates: "{{ wp_doc_root }}/{{ enviro }}/wp-content/plugins/{{ item }}"
