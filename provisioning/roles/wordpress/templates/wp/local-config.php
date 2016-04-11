@@ -16,9 +16,6 @@ if (! defined('WP_CLI')) {
     define('DB_HOST', '192.168.150.20');
 }
 
-/** WP Engine Specific settings */
-define( 'WPE_ENVIRONMENT', 'developer' );
-
 /** Database Charset to use in creating database tables. */
 define('DB_CHARSET', 'utf8');
 
