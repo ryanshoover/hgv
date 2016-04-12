@@ -131,6 +131,75 @@ class WP_Object_Cache {
 	var $cache_enabled = true;
 	var $default_expiration = 0;
 
+	function __construct() {
+		global $memcached_servers;
+
+		if ( isset( $memcached_servers ) )
+			$buckets = $memcached_servers;
+		else
+			$buckets = array( '127.0.0.1' );
+
+		reset( $buckets );
+		if ( is_int( key( $buckets ) ) )
+			$buckets = array( 'default' => $buckets );
+
+		foreach ( $buckets as $bucket => $servers ) {
+			$this->mc[$bucket] = new Memcached();
+
+			$instances = array();
+			foreach ( $servers as $server ) {
+				@list( $node, $port ) = explode( ':', $server );
+				if ( empty( $port ) )
+					$port = ini_get( 'memcache.default_port' );
+				$port = intval( $port );
+				if ( !$port )
+					$port = 11211;
+
+				$instances[] = array( $node, $port, 1 );
+			}
+			$this->mc[$bucket]->addServers( $instances );
+		}
+
+		global $blog_id, $table_prefix;
+		$this->global_prefix = '';
+		$this->blog_prefix = '';
+		if ( function_exists( 'is_multisite' ) ) {
+			$this->global_prefix = ( is_multisite() || defined( 'CUSTOM_USER_TABLE' ) && defined( 'CUSTOM_USER_META_TABLE' ) ) ? '' : $table_prefix;
+			$this->blog_prefix = ( is_multisite() ? $blog_id : $table_prefix ) . ':';
+		}
+
+		$this->cache_hits =& $this->stats['get'];
+		$this->cache_misses =& $this->stats['add'];
+
+		/**
+		 * Workaround for bug between memcached and WP options
+		 * Often, changing an option wouldn't show up until memcached is cleared
+		 * This stems from an issue that get_option first uses the cached $alloptions
+		 * value to find a specific option. $alloptions doesn't get flushed when plugins,
+		 * themes, and other common option changes are made.
+		 */
+		$flush_actions = array(
+			// Options management
+			'added_option',
+			'updated_option',
+			'deleted_option',
+			// Transient management
+			'setted_transient',
+			'deleted_transient',
+			// Network options management
+			'add_site_option',
+			'delete_site_option',
+			'update_site_option',
+			// Network transient management
+			'setted_site_transient',
+			'deleted_site_transient',
+			);
+
+		foreach ( $flush_actions as $action ) {
+			add_action( $action, array( $this, 'flush' ) );
+		}
+	}
+
 	function add( $id, $data, $group = 'default', $expire = 0 ) {
 		$key = $this->key( $id, $group );
 
@@ -213,8 +282,7 @@ class WP_Object_Cache {
 	}
 
 	function flush() {
-		// Don't flush if multi-blog.
-		if ( function_exists( 'is_site_admin' ) || defined( 'CUSTOM_USER_TABLE' ) && defined( 'CUSTOM_USER_META_TABLE' ) )
+		if ( defined( 'CUSTOM_USER_TABLE' ) && defined( 'CUSTOM_USER_META_TABLE' ) )
 			return true;
 
 		$ret = true;
@@ -414,47 +482,6 @@ class WP_Object_Cache {
 			return $this->mc[$group];
 		return $this->mc['default'];
 	}
-
-	function WP_Object_Cache() {
-		global $memcached_servers;
-
-		if ( isset( $memcached_servers ) )
-			$buckets = $memcached_servers;
-		else
-			$buckets = array( '127.0.0.1' );
-
-		reset( $buckets );
-		if ( is_int( key( $buckets ) ) )
-			$buckets = array( 'default' => $buckets );
-
-		foreach ( $buckets as $bucket => $servers ) {
-			$this->mc[$bucket] = new Memcached();
-
-			$instances = array();
-			foreach ( $servers as $server ) {
-				@list( $node, $port ) = explode( ':', $server );
-				if ( empty( $port ) )
-					$port = ini_get( 'memcache.default_port' );
-				$port = intval( $port );
-				if ( !$port )
-					$port = 11211;
-
-				$instances[] = array( $node, $port, 1 );
-			}
-			$this->mc[$bucket]->addServers( $instances );
-		}
-
-		global $blog_id, $table_prefix;
-		$this->global_prefix = '';
-		$this->blog_prefix = '';
-		if ( function_exists( 'is_multisite' ) ) {
-			$this->global_prefix = ( is_multisite() || defined( 'CUSTOM_USER_TABLE' ) && defined( 'CUSTOM_USER_META_TABLE' ) ) ? '' : $table_prefix;
-			$this->blog_prefix = ( is_multisite() ? $blog_id : $table_prefix ) . ':';
-		}
-
-		$this->cache_hits =& $this->stats['get'];
-		$this->cache_misses =& $this->stats['add'];
-	}
 }
 else: // No Memcached
 
@@ -468,18 +495,3 @@ else: // No Memcached
 	}
 
 endif;
-
-/**
- * Workaround for bug between memcached and WP options
- * Often, changing an option wouldn't show up until memcached is cleared
- * This stems from an issue that get_option first uses the cached $alloptions
- * value to find a specific option. $alloptions doesn't get flushed when plugins,
- * themes, and other common option changes are made.
- */
-if ( function_exists( 'wp_cache_flush' ) ) {
-	$flush_actions = ['activate_plugin', 'deactivate_plugin', 'switch_theme', 'generate_rewrite_rules'];
-
-	foreach ( $flush_actions as $action ) {
-		add_action( $action, 'wp_cache_flush' );
-	}
-}
